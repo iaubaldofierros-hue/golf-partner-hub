@@ -2,28 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MessageCircle, Search, Loader2, Paperclip } from "lucide-react";
+import { Mail, Search, Loader2, Paperclip } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
-import { generateWhatsAppLink, personalizeMessage } from "@/lib/whatsapp";
 import { formatDate } from "@/lib/utils";
 
-interface PromoFile {
-  id: string;
-  name: string;
-  url: string;
-}
-
-interface PromoForShare {
+interface PromoForEmail {
   id: string;
   name: string;
   promoRate?: string | number | null;
   validTo?: string | Date | null;
   bookingLink?: string | null;
-  whatsappMessage?: string | null;
+  benefits?: string | null;
+}
+
+interface PromoFile {
+  id: string;
+  name: string;
 }
 
 interface AccountResult {
@@ -33,23 +32,21 @@ interface AccountResult {
     id: string;
     firstName: string;
     lastName?: string | null;
-    whatsapp?: string | null;
+    email?: string | null;
   }[];
 }
 
-interface ShareModalProps {
-  promotion: PromoForShare;
+interface EmailModalProps {
+  promotion: PromoForEmail;
   open: boolean;
   onClose: () => void;
 }
 
 /**
- * Flujo "enviar promo por WhatsApp":
- * 1. Buscar la cuenta/contacto
- * 2. Ver el mensaje ya personalizado ({{nombre}}, {{promo}}, {{tarifa}}…)
- * 3. Enviar → abre WhatsApp y registra la actividad con la promoción ligada
+ * Flujo "enviar promo por email, con adjunto real":
+ * buscar contacto → componer asunto/cuerpo → elegir archivo adjunto (opcional) → enviar vía Resend.
  */
-export function PromotionShareModal({ promotion, open, onClose }: ShareModalProps) {
+export function PromotionEmailModal({ promotion, open, onClose }: EmailModalProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AccountResult[]>([]);
@@ -59,15 +56,16 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
     accountName: string;
     contactId: string;
     contactName: string;
-    whatsapp: string;
+    email: string;
   } | null>(null);
-  const [message, setMessage] = useState("");
-  const [logging, setLogging] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [subject, setSubject] = useState(`Promoción: ${promotion.name}`);
+  const [body, setBody] = useState("");
   const [files, setFiles] = useState<PromoFile[]>([]);
-  const [attachedFileId, setAttachedFileId] = useState("");
+  const [fileId, setFileId] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Archivos disponibles de esta promoción (videos, PDFs, imágenes)
   useEffect(() => {
     if (!open) return;
     fetch(`/api/files?promotionId=${promotion.id}`)
@@ -76,18 +74,6 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
       .catch(() => setFiles([]));
   }, [open, promotion.id]);
 
-  function toggleAttachment(fileId: string) {
-    const file = files.find((f) => f.id === fileId);
-    setAttachedFileId(fileId);
-    if (!file) return;
-    setMessage((prev) => {
-      // Quita cualquier línea de adjunto previa antes de agregar la nueva
-      const cleaned = prev.replace(/\n?📎.*$/s, "");
-      return fileId ? `${cleaned}\n📎 ${file.name}: ${file.url}` : cleaned;
-    });
-  }
-
-  // Búsqueda con debounce ligero
   useEffect(() => {
     if (!open || query.length < 2) {
       setResults([]);
@@ -98,7 +84,7 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
       try {
         const res = await fetch(`/api/accounts?q=${encodeURIComponent(query)}`);
         const data: AccountResult[] = await res.json();
-        setResults(data.filter((a) => a.contacts.some((c) => c.whatsapp)));
+        setResults(data.filter((a) => a.contacts.some((c) => c.email)));
       } finally {
         setSearching(false);
       }
@@ -106,58 +92,51 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
     return () => clearTimeout(t);
   }, [query, open]);
 
-  const baseTemplate = useMemo(
-    () =>
-      promotion.whatsappMessage ||
-      `Hola {{nombre}} 👋 Te comparto nuestra promoción *{{promo}}*${
-        promotion.promoRate ? " con tarifa especial de {{tarifa}}" : ""
-      }${promotion.validTo ? ", vigente hasta {{vigencia}}" : ""}. ¿Te reservo tee times? {{link}}`,
-    [promotion]
-  );
+  const defaultBody = useMemo(() => {
+    const lines = [`Hola {{nombre}},`, "", `Te comparto nuestra promoción ${promotion.name}.`];
+    if (promotion.promoRate) lines.push(`Tarifa especial: $${promotion.promoRate} USD.`);
+    if (promotion.validTo) lines.push(`Vigente hasta ${formatDate(new Date(promotion.validTo))}.`);
+    if (promotion.benefits) lines.push("", promotion.benefits);
+    if (promotion.bookingLink) lines.push("", `Reserva aquí: ${promotion.bookingLink}`);
+    return lines.join("\n");
+  }, [promotion]);
 
   function selectContact(account: AccountResult, contact: AccountResult["contacts"][number]) {
-    if (!contact.whatsapp) return;
-    const sel = {
+    if (!contact.email) return;
+    setSelected({
       accountId: account.id,
       accountName: account.name,
       contactId: contact.id,
       contactName: contact.firstName,
-      whatsapp: contact.whatsapp,
-    };
-    setSelected(sel);
-    setAttachedFileId("");
-    setMessage(
-      personalizeMessage(baseTemplate, {
-        nombre: contact.firstName,
-        cuenta: account.name,
-        promo: promotion.name,
-        tarifa: promotion.promoRate ? `$${promotion.promoRate} USD` : "",
-        vigencia: promotion.validTo ? formatDate(new Date(promotion.validTo)) : "",
-        link: promotion.bookingLink ?? "",
-      })
-    );
+      email: contact.email,
+    });
+    setBody(defaultBody.replace(/\{\{nombre\}\}/g, contact.firstName));
   }
 
   async function send() {
     if (!selected) return;
-    window.open(generateWhatsAppLink(selected.whatsapp, message), "_blank");
-    setLogging(true);
-    try {
-      await fetch("/api/activities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountId: selected.accountId,
-          contactId: selected.contactId,
-          type: "WHATSAPP_SENT",
-          notes: `Promoción enviada: ${promotion.name}`,
-          promotionId: promotion.id,
-        }),
-      });
+    setSending(true);
+    setError(null);
+    const res = await fetch("/api/promotions/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        promotionId: promotion.id,
+        accountId: selected.accountId,
+        contactId: selected.contactId,
+        to: selected.email,
+        subject,
+        html: body.replace(/\n/g, "<br/>"),
+        fileId: fileId || undefined,
+      }),
+    });
+    setSending(false);
+    if (res.ok) {
       setSent(true);
       router.refresh();
-    } finally {
-      setLogging(false);
+    } else {
+      const b = await res.json().catch(() => null);
+      setError(b?.error ?? "No se pudo enviar el correo.");
     }
   }
 
@@ -166,11 +145,12 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
     setSent(false);
     setQuery("");
     setResults([]);
-    setAttachedFileId("");
+    setFileId("");
+    setError(null);
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title={`Enviar: ${promotion.name}`}>
+    <Dialog open={open} onClose={onClose} title={`Enviar por email: ${promotion.name}`}>
       {!selected ? (
         <div className="space-y-3">
           <div className="relative">
@@ -191,7 +171,7 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
           <div className="max-h-64 space-y-2 overflow-y-auto">
             {results.map((account) =>
               account.contacts
-                .filter((c) => c.whatsapp)
+                .filter((c) => c.email)
                 .map((c) => (
                   <button
                     key={c.id}
@@ -202,21 +182,21 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
                       <p className="text-sm font-medium text-ink">
                         {c.firstName} {c.lastName ?? ""}
                       </p>
-                      <p className="text-xs text-ink/50">{account.name}</p>
+                      <p className="text-xs text-ink/50">{account.name} · {c.email}</p>
                     </div>
-                    <MessageCircle className="h-4 w-4 text-[#25D366]" />
+                    <Mail className="h-4 w-4 text-fairway-700" />
                   </button>
                 ))
             )}
             {query.length >= 2 && !searching && results.length === 0 && (
-              <p className="text-sm text-ink/50">Sin contactos con WhatsApp para esa búsqueda.</p>
+              <p className="text-sm text-ink/50">Sin contactos con email para esa búsqueda.</p>
             )}
           </div>
         </div>
       ) : sent ? (
         <div className="space-y-4 text-center py-4">
           <p className="text-sm text-ink">
-            ✅ Enviado a <strong>{selected.contactName}</strong> y registrado en la cuenta{" "}
+            ✅ Enviado a <strong>{selected.contactName}</strong> ({selected.email}) y registrado en la cuenta{" "}
             <strong>{selected.accountName}</strong>.
           </p>
           <div className="flex justify-center gap-3">
@@ -227,14 +207,21 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-ink/70">
-            Para <strong>{selected.contactName}</strong> · {selected.accountName}
+            Para <strong>{selected.contactName}</strong> · {selected.email}
           </p>
-          <Textarea rows={6} value={message} onChange={(e) => setMessage(e.target.value)} />
+          <div className="space-y-1.5">
+            <Label>Asunto</Label>
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cuerpo del correo</Label>
+            <Textarea rows={7} value={body} onChange={(e) => setBody(e.target.value)} />
+          </div>
           {files.length > 0 && (
             <div className="flex items-center gap-2">
               <Paperclip className="h-4 w-4 text-ink/40" />
-              <Select value={attachedFileId} onChange={(e) => toggleAttachment(e.target.value)} className="text-xs h-8">
-                <option value="">Sin adjunto (link)</option>
+              <Select value={fileId} onChange={(e) => setFileId(e.target.value)} className="text-xs h-8">
+                <option value="">Sin adjunto</option>
                 {files.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name}
@@ -243,10 +230,11 @@ export function PromotionShareModal({ promotion, open, onClose }: ShareModalProp
               </Select>
             </div>
           )}
+          {error && <p className="text-sm text-danger">{error}</p>}
           <div className="flex gap-3">
-            <Button variant="whatsapp" onClick={send} disabled={logging}>
-              {logging ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-              Enviar por WhatsApp
+            <Button onClick={send} disabled={sending}>
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              Enviar por email
             </Button>
             <Button variant="ghost" onClick={() => setSelected(null)}>Cambiar contacto</Button>
           </div>

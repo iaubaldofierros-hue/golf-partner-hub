@@ -41,6 +41,7 @@ export default async function PromotionsPage({
     validTo: p.validTo?.toISOString() ?? null,
     bookingLink: p.bookingLink,
     whatsappMessage: p.whatsappMessage,
+    benefits: p.benefits,
     originName: p.businessOrigin?.name ?? null,
   }));
 

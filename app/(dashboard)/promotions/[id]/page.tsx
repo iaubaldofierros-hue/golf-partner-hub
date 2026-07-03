@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PromotionForm } from "@/components/promotions/promotion-form";
+import { FileManager } from "@/components/shared/file-manager";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,18 @@ export default async function EditPromotionPage({
           status: promotion.status,
         }}
       />
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Archivos adjuntos</CardTitle>
+          <p className="text-xs text-ink/50">
+            Videos, PDFs o imágenes de esta promoción — el link se puede incluir al enviar por WhatsApp, y se puede
+            adjuntar de verdad al enviar por email.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <FileManager promotionId={promotion.id} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

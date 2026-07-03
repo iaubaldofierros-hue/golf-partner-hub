@@ -8,6 +8,7 @@ import { QuickActionButtons } from "@/components/shared/quick-action-buttons";
 import { AccountTabs } from "@/components/accounts/account-tabs";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { EmptyState } from "@/components/shared/empty-state";
+import { FileManager } from "@/components/shared/file-manager";
 import { CHANNEL_LABELS, OPPORTUNITY_STAGE_LABELS } from "@/lib/labels";
 import { timeAgo, formatDate, formatMoney } from "@/lib/utils";
 
@@ -140,6 +141,7 @@ export default async function AccountDetailPage({
             {account.notes || <span className="text-ink/40">Sin notas. Edita la cuenta para agregar contexto comercial.</span>}
           </div>
         }
+        files={<FileManager accountId={account.id} />}
       />
 
       <Link href="/accounts" className="inline-block text-sm text-fairway-700 hover:underline">← Volver a cuentas</Link>

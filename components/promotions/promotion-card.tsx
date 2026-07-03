@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Send, Pencil, CalendarDays, Percent } from "lucide-react";
+import { Send, Mail, Pencil, CalendarDays, Percent } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PromotionShareModal } from "@/components/promotions/promotion-share-modal";
+import { PromotionEmailModal } from "@/components/promotions/promotion-email-modal";
 import { PROMOTION_STATUS_LABELS, PROMOTION_STATUS_COLORS } from "@/lib/labels";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -20,11 +21,13 @@ export interface PromotionCardData {
   validTo?: string | null;
   bookingLink?: string | null;
   whatsappMessage?: string | null;
+  benefits?: string | null;
   originName?: string | null;
 }
 
 export function PromotionCard({ promo }: { promo: PromotionCardData }) {
   const [share, setShare] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   return (
     <Card className="p-4 flex flex-col gap-3">
@@ -69,6 +72,9 @@ export function PromotionCard({ promo }: { promo: PromotionCardData }) {
         <Button size="sm" variant="whatsapp" onClick={() => setShare(true)} disabled={promo.status !== "ACTIVE"}>
           <Send className="h-4 w-4" /> Enviar
         </Button>
+        <Button size="sm" variant="outline" onClick={() => setEmailOpen(true)} disabled={promo.status !== "ACTIVE"}>
+          <Mail className="h-4 w-4" /> Email
+        </Button>
         <Link href={`/promotions/${promo.id}`}>
           <Button size="sm" variant="outline">
             <Pencil className="h-4 w-4" /> Editar
@@ -88,6 +94,20 @@ export function PromotionCard({ promo }: { promo: PromotionCardData }) {
           }}
           open
           onClose={() => setShare(false)}
+        />
+      )}
+      {emailOpen && (
+        <PromotionEmailModal
+          promotion={{
+            id: promo.id,
+            name: promo.name,
+            promoRate: promo.promoRate,
+            validTo: promo.validTo,
+            bookingLink: promo.bookingLink,
+            benefits: promo.benefits,
+          }}
+          open
+          onClose={() => setEmailOpen(false)}
         />
       )}
     </Card>

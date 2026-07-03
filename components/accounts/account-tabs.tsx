@@ -9,15 +9,17 @@ interface AccountTabsProps {
   activities: React.ReactNode;
   opportunities: React.ReactNode;
   notes: React.ReactNode;
+  files: React.ReactNode;
 }
 
 /** Pestañas simples de la ficha ejecutiva — sin saturar la pantalla */
-export function AccountTabs({ counts, contacts, activities, opportunities, notes }: AccountTabsProps) {
+export function AccountTabs({ counts, contacts, activities, opportunities, notes, files }: AccountTabsProps) {
   const [active, setActive] = useState("activities");
   const tabs = [
     { id: "activities", label: "Actividades", count: counts.activities },
     { id: "contacts", label: "Contactos", count: counts.contacts },
     { id: "opportunities", label: "Oportunidades", count: counts.opportunities },
+    { id: "files", label: "Archivos" },
     { id: "notes", label: "Notas" },
   ];
   return (
@@ -27,6 +29,7 @@ export function AccountTabs({ counts, contacts, activities, opportunities, notes
         {active === "activities" && activities}
         {active === "contacts" && contacts}
         {active === "opportunities" && opportunities}
+        {active === "files" && files}
         {active === "notes" && notes}
       </div>
     </div>

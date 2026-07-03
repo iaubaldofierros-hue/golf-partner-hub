@@ -283,6 +283,7 @@ model Promotion {
   activities    Activity[]
   campaigns     Campaign[]
   opportunities Opportunity[]
+  files         File[]
 
   @@index([status])
 }
@@ -392,14 +393,19 @@ model ContactTag {
 }
 
 model File {
-  id        String   @id @default(cuid())
-  accountId String?
-  account   Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  name      String
-  url       String
-  mimeType  String?
-  size      Int?
-  createdAt DateTime @default(now())
+  id          String     @id @default(cuid())
+  accountId   String?
+  account     Account?   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  promotionId String?
+  promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  name        String
+  url         String
+  mimeType    String?
+  size        Int?
+  createdAt   DateTime   @default(now())
+
+  @@index([accountId])
+  @@index([promotionId])
 }
 
 model Task {
