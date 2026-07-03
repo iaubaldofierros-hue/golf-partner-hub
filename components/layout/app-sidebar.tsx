@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Sun, Building2, Users, Tag, Target, BarChart3, Settings, Flag,
+  Sun, Building2, Users, Tag, Target, BarChart3, Settings, Flag, ShieldAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ const NAV = [
   { href: "/promotions", label: "Promociones", icon: Tag },
   { href: "/opportunities", label: "Oportunidades", icon: Target },
   { href: "/reports", label: "Reportes", icon: BarChart3, admin: true },
+  { href: "/admin", label: "Administración", icon: ShieldAlert, admin: true },
   { href: "/settings", label: "Configuración", icon: Settings, admin: true },
 ];
 
