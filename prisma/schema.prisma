@@ -1,0 +1,439 @@
+// ============================================================
+// Golf Partner Hub — Prisma Schema
+// CRM comercial para campo de golf (Cuentas B2B, Contactos,
+// Actividades, Promociones, Campañas, Oportunidades)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- ENUMS ----------
+
+enum Role {
+  ADMIN
+  SALES_DIRECTOR
+  SALES_MANAGER
+  MARKETING
+  VIEWER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AccountStatus {
+  PROSPECT          // Prospecto
+  CONTACTED         // Contactado
+  ACTIVE            // Activo
+  HIGH_PRODUCTION   // Alta producción
+  LOW_PRODUCTION    // Baja producción
+  NEGOTIATING       // En negociación
+  FOLLOW_UP         // En seguimiento
+  INACTIVE          // Inactivo
+  NOT_INTERESTED    // No interesado
+  NEEDS_VISIT       // Requiere visita
+  NEEDS_CALL        // Requiere llamada
+  NEEDS_PROMO       // Requiere promoción
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  VIP
+}
+
+enum PotentialLevel {
+  LOW
+  MEDIUM
+  HIGH
+  STRATEGIC
+}
+
+enum Channel {
+  WHATSAPP
+  EMAIL
+  PHONE
+  IN_PERSON
+  OTHER
+}
+
+enum ActivityType {
+  EMAIL_SENT
+  EMAIL_RECEIVED
+  WHATSAPP_SENT
+  WHATSAPP_RECEIVED
+  CALL_MADE
+  CALL_RECEIVED
+  VISIT
+  MEETING
+  PROPOSAL_SENT
+  RATE_SENT
+  CONTRACT_SENT
+  FOLLOW_UP
+  INTERNAL_NOTE
+  BOOKING_RECEIVED
+  COMPLAINT
+  FAM_TRIP
+  PLAY_INVITATION
+}
+
+enum PromotionStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXPIRED
+  ARCHIVED
+}
+
+enum OpportunityStage {
+  NEW_LEAD
+  CONTACTED
+  INTERESTED
+  PROPOSAL_SENT
+  NEGOTIATING
+  CONFIRMED
+  WON
+  LOST
+  FUTURE_FOLLOW_UP
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+enum TaskStatus {
+  PENDING
+  DONE
+  CANCELLED
+}
+
+// ---------- MODELOS ----------
+
+model User {
+  id            String       @id @default(cuid())
+  name          String
+  email         String       @unique
+  passwordHash  String
+  role          Role         @default(SALES_MANAGER)
+  status        UserStatus   @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  accounts      Account[]    @relation("AccountOwner")
+  activities    Activity[]
+  opportunities Opportunity[]
+  campaigns     Campaign[]
+  tasks         Task[]
+  reminders     Reminder[]
+  auditLogs     AuditLog[]
+}
+
+model AccountType {
+  id       String    @id @default(cuid())
+  name     String    @unique // Concierge, Hotel, Tour Operador, DMC, etc.
+  accounts Account[]
+}
+
+model BusinessOrigin {
+  id         String      @id @default(cuid())
+  name       String      @unique // Concierges, Hoteles, DMC, MICE, etc.
+  accounts   Account[]
+  promotions Promotion[]
+}
+
+model Account {
+  id                   String          @id @default(cuid())
+  name                 String
+  accountTypeId        String?
+  accountType          AccountType?    @relation(fields: [accountTypeId], references: [id])
+  businessOriginId     String?
+  businessOrigin       BusinessOrigin? @relation(fields: [businessOriginId], references: [id])
+  country              String?
+  city                 String?
+  zone                 String?
+  address              String?
+  website              String?
+  mainPhone            String?
+  mainEmail            String?
+  preferredLanguage    String          @default("es") // es | en
+  status               AccountStatus   @default(PROSPECT)
+  priority             Priority        @default(MEDIUM)
+  potentialLevel       PotentialLevel  @default(MEDIUM)
+  historicalRevenue    Decimal?        @db.Decimal(12, 2)
+  estimatedRevenue     Decimal?        @db.Decimal(12, 2)
+  assignedRate         Decimal?        @db.Decimal(10, 2)
+  commissionPercentage Decimal?        @db.Decimal(5, 2)
+  ownerId              String?
+  owner                User?           @relation("AccountOwner", fields: [ownerId], references: [id])
+  lastContactDate      DateTime?
+  nextFollowUpDate     DateTime?
+  notes                String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  contacts      Contact[]
+  activities    Activity[]
+  opportunities Opportunity[]
+  tags          AccountTag[]
+  files         File[]
+  tasks         Task[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([nextFollowUpDate])
+  @@index([businessOriginId])
+}
+
+model Contact {
+  id                String    @id @default(cuid())
+  accountId         String
+  account           Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  firstName         String
+  lastName          String?
+  position          String?
+  email             String?
+  phone             String?
+  whatsapp          String?
+  preferredChannel  Channel   @default(WHATSAPP)
+  language          String    @default("es")
+  influenceLevel    String?   // Decisor, Influenciador, Operativo
+  receivesPromotions Boolean  @default(true)
+  birthday          DateTime?
+  status            String    @default("Activo")
+  notes             String?
+  lastContactDate   DateTime?
+  nextFollowUpDate  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  activities         Activity[]
+  opportunities      Opportunity[]
+  tags               ContactTag[]
+  campaignRecipients CampaignRecipient[]
+
+  @@index([accountId])
+  @@index([email])
+  @@index([whatsapp])
+}
+
+model Activity {
+  id               String       @id @default(cuid())
+  accountId        String
+  account          Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contactId        String?
+  contact          Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  type             ActivityType
+  channel          Channel?
+  subject          String?
+  notes            String?
+  result           String?      // No contestó, Interesado, Solicita tarifa, etc.
+  activityDate     DateTime     @default(now())
+  nextFollowUpDate DateTime?
+  promotionId      String?
+  promotion        Promotion?   @relation(fields: [promotionId], references: [id])
+  opportunityId    String?
+  opportunity      Opportunity? @relation(fields: [opportunityId], references: [id])
+  createdById      String?
+  createdBy        User?        @relation(fields: [createdById], references: [id])
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([accountId, activityDate])
+  @@index([type])
+}
+
+model Promotion {
+  id               String          @id @default(cuid())
+  name             String
+  type             String          // Green Fee especial, Twilight, Stay & Play, etc.
+  businessOriginId String?
+  businessOrigin   BusinessOrigin? @relation(fields: [businessOriginId], references: [id])
+  targetSegment    String?
+  validFrom        DateTime?
+  validTo          DateTime?
+  season           String?
+  publicRate       Decimal?        @db.Decimal(10, 2)
+  promoRate        Decimal?        @db.Decimal(10, 2)
+  commission       Decimal?        @db.Decimal(5, 2)
+  promoCode        String?
+  restrictions     String?
+  benefits         String?
+  bookingLink      String?
+  imageUrl         String?
+  spanishCopy      String?
+  englishCopy      String?
+  whatsappMessage  String?
+  phoneScript      String?
+  status           PromotionStatus @default(DRAFT)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  activities    Activity[]
+  campaigns     Campaign[]
+  opportunities Opportunity[]
+
+  @@index([status])
+}
+
+model Campaign {
+  id              String         @id @default(cuid())
+  promotionId     String?
+  promotion       Promotion?     @relation(fields: [promotionId], references: [id])
+  name            String
+  subject         String
+  previewText     String?
+  body            String
+  segmentId       String?
+  language        String         @default("es")
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  status          CampaignStatus @default(DRAFT)
+  totalRecipients Int            @default(0)
+  delivered       Int            @default(0)
+  opened          Int            @default(0)
+  clicked         Int            @default(0)
+  bounced         Int            @default(0)
+  replies         Int            @default(0)
+  createdById     String?
+  createdBy       User?          @relation(fields: [createdById], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  recipients  CampaignRecipient[]
+  emailEvents EmailEvent[]
+}
+
+model CampaignRecipient {
+  id         String    @id @default(cuid())
+  campaignId String
+  campaign   Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId  String
+  contact    Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  email      String
+  status     String    @default("pending") // pending | sent | delivered | bounced
+  sentAt     DateTime?
+
+  @@unique([campaignId, contactId])
+}
+
+model EmailEvent {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  email      String
+  event      String   // delivered | opened | clicked | bounced | complained
+  metadata   Json?
+  createdAt  DateTime @default(now())
+}
+
+model Opportunity {
+  id               String           @id @default(cuid())
+  accountId        String
+  account          Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contactId        String?
+  contact          Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  name             String
+  stage            OpportunityStage @default(NEW_LEAD)
+  estimatedValue   Decimal?         @db.Decimal(12, 2)
+  estimatedPlayers Int?
+  expectedDate     DateTime?
+  probability      Int?             // 0-100
+  source           String?
+  promotionId      String?
+  promotion        Promotion?       @relation(fields: [promotionId], references: [id])
+  ownerId          String?
+  owner            User?            @relation(fields: [ownerId], references: [id])
+  notes            String?
+  lostReason       String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  activities Activity[]
+
+  @@index([stage])
+}
+
+model Tag {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  color    String?
+  accounts AccountTag[]
+  contacts ContactTag[]
+}
+
+model AccountTag {
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, tagId])
+}
+
+model ContactTag {
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+}
+
+model File {
+  id        String   @id @default(cuid())
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name      String
+  url       String
+  mimeType  String?
+  size      Int?
+  createdAt DateTime @default(now())
+}
+
+model Task {
+  id        String     @id @default(cuid())
+  title     String
+  dueDate   DateTime?
+  status    TaskStatus @default(PENDING)
+  accountId String?
+  account   Account?   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ownerId   String?
+  owner     User?      @relation(fields: [ownerId], references: [id])
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([status, dueDate])
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  title     String
+  remindAt  DateTime
+  done      Boolean  @default(false)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String   // create | update | delete | import | export | login
+  entity    String   // Account, Contact, Promotion...
+  entityId  String?
+  changes   Json?
+  createdAt DateTime @default(now())
+}
