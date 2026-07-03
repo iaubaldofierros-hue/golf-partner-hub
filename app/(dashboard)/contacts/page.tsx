@@ -86,7 +86,7 @@ export default async function ContactsPage({
                       <Link href={`/accounts/${c.accountId}`} className="text-fairway-700 hover:underline">
                         {c.account.name}
                       </Link>
-                      <p className="text-xs text-ink/50">{c.account.accountType.name}</p>
+                      <p className="text-xs text-ink/50">{c.account.accountType?.name}</p>
                     </td>
                     <td className="px-4 py-3 text-ink/70">
                       {CHANNEL_LABELS[c.preferredChannel] ?? c.preferredChannel}
